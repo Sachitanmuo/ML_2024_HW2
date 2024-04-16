@@ -47,6 +47,62 @@ void Model::read_file(){
         data.Defensive = stod(defensive_str);
         Testing_set.push_back(data); // Store data in Testing_set
     }
+
+    //generate the 3-class data
+    vector<vector<double>> team_(3, vector<double>(3));
+    team_[0] = {1, 0, 0};
+    team_[1] = {0, 1, 0};
+    team_[2] = {0, 0, 1};
+
+    for(auto& data : Training_set){
+        Data d;
+        d.Offensive = data.Offensive;
+        d.Defensive = data.Defensive;
+        switch (data.team){
+            case 0:
+                d.team = 0;
+                d.team_vector = team_[0];
+                break;
+            case 1:
+                d.team = 1;
+                d.team_vector = team_[1];
+                break;
+            case 2:
+                d.team = 2;
+                d.team_vector = team_[2];
+                break;
+            case 3:
+                d.team = 0;
+                d.team_vector = team_[0];
+                break;
+        }
+        Training_set_p2.push_back(d);
+    }
+
+    for(auto& data : Testing_set){
+        Data d;
+        d.Offensive = data.Offensive;
+        d.Defensive = data.Defensive;
+        switch (data.team){
+            case 0:
+                d.team = 0;
+                d.team_vector = team_[0];
+                break;
+            case 1:
+                d.team = 1;
+                d.team_vector = team_[1];
+                break;
+            case 2:
+                d.team = 2;
+                d.team_vector = team_[2];
+                break;
+            case 3:
+                d.team = 0;
+                d.team_vector = team_[0];
+                break;
+        }
+        Testing_set_p2.push_back(d);
+    }
 }
 
 void Model::Train_Generative(){
@@ -103,7 +159,7 @@ void Model::Train_Generative(){
         }
         cout << endl;
     }
-    cout << "=======================================" << endl;
+    cout << "=========================================" << endl;
 
     //output weights
     ofstream out("generative_weights.txt");
@@ -230,11 +286,11 @@ vector<Mean> Model::calculate_mean(vector<Data>& data){
     int N = data.size();
     vector<Mean> m(4);
     int count[4] = {0};
-    for(auto i:m){
+    for(auto& i:m){
         i.Offensive = 0;
         i.Defensive = 0;
     }
-    for(auto i: data){
+    for(auto& i: data){
         count[i.team]++;
         m[i.team].Offensive += i.Offensive;
         m[i.team].Defensive += i.Defensive;

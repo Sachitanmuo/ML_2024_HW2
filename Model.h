@@ -4,6 +4,7 @@
 #include<sstream>
 #include<cmath>
 #include "eigen-3.3.7/Eigen/Eigen"
+#include <iomanip>
 using namespace std;
 struct Data{
     double Offensive;
@@ -27,6 +28,8 @@ class Model{
 private:
     vector<Data> Training_set;
     vector<Data> Testing_set;
+    vector<Data> Training_set_p2;
+    vector<Data> Testing_set_p2;
     string training_file = "HW2_training.csv";
     string testing_file = "HW2_testing.csv";
     vector<double> Train_prob;
