@@ -64,7 +64,6 @@ void Model::Train_Generative(){
         W[i] = covariance_matrix.inverse() * u[i];
         cout << "W["<<i<<"]: \n"<< W[i] << endl;
         W0[i] = (-0.5) * u[i].transpose() * covariance_matrix.inverse() * u[i] * log(Train_prob[i]);
-        cout << "W0["<<i<<"]: \n"<< W0[i] << endl;
     }
     vector<Eigen::VectorXd> y_pred(Training_set.size(), Eigen::VectorXd(4));
     vector<Eigen::VectorXd> ground_truth(Training_set.size(), Eigen::VectorXd(4));
@@ -105,6 +104,12 @@ void Model::Train_Generative(){
         cout << endl;
     }
     cout << "=======================================" << endl;
+
+    //output weights
+    ofstream out("generative_weights.txt");
+    for(int i = 0; i < 4; i++){
+        out << W[i](0) << " " <<W[i](1) << " " << W0[i] << endl;
+    }
 
 }
 
@@ -201,6 +206,15 @@ void Model::Train_Discriminative(){
 
     //calculate the accuracy
     double accuracy = cal_acc(Conf_Mtx);
+    cout << "Accuracy: " << accuracy << endl;
+    //========output weights==================
+    ofstream out("discriminative_weights.txt");
+    for(auto& w : weights_dis){
+        for(int i = 0; i < w.size() ; i++){
+            out << w(i) << " ";
+        }
+        out << endl;
+    }
 }
 vector<double> Model::calculate_prob(vector<Data>& data){
     int N = data.size();
@@ -208,9 +222,7 @@ vector<double> Model::calculate_prob(vector<Data>& data){
     for(auto d: data){
         prob[d.team]++;
     }
-    for(auto p:prob){
-        p /= N;
-    }
+
     return prob;
 }
 
@@ -239,20 +251,18 @@ vector<Mean> Model::calculate_mean(vector<Data>& data){
     mean_[1] /= count_;
     return m;
 }
-/*
-Eigen::MatrixXd Model::calculate_cov_mat(vector<Data>& data){
-    for(int i = 0; i < 4; i ++){
-        double mean_Offensive = Training_mean[0].Offensive;
-        double mean_Defensive = Training_mean[0].Defensive;
+
+void Model::calculate_cov_mat_(vector<Data>& data){
+    for(int k = 0; k < data[0].team_vector.size(); k ++){
+        double mean_Offensive = mean_[0];
+        double mean_Defensive = mean_[1];
         Eigen::MatrixXd cov_mat(2, 2);
         int count = 0;
         for(auto& d: data){
-            if(d.team == 0){
                 count++;
                 Eigen::VectorXd vec(2);
                 vec << d.Offensive - mean_Offensive, d.Defensive - mean_Defensive;
                 cov_mat += vec * vec.transpose();
-            }
         }
         cov_mat /= (count - 1);
         for(int i = 0; i < cov_mat.rows() ; i ++){
@@ -261,11 +271,31 @@ Eigen::MatrixXd Model::calculate_cov_mat(vector<Data>& data){
             }
             cout << endl;
         }
+        CM[k] = cov_mat;
     }
     
-    return cov_mat;
-}*/
+}
 
+Eigen::MatrixXd Model::calculate_cov_mat(vector<Data>& data){
+        Eigen::MatrixXd cov_mat(2, 2);
+        int count = 0;
+        for(auto& d: data){
+                count++;
+                Eigen::VectorXd vec(2);
+                vec << d.Offensive - Training_mean[d.team].Offensive, d.Defensive - Training_mean[d.team].Defensive;
+                cov_mat += vec * vec.transpose();
+                //cout << vec << endl;
+        }
+        cov_mat /= (count - 1);
+        for(int i = 0; i < cov_mat.rows() ; i ++){
+            for(int j = 0; j < cov_mat.cols() ; j++){
+                cout << cov_mat(i, j) << " ";
+            }
+            cout << endl;
+        }
+        return cov_mat;
+    
+}
 vector<double> Model::predict_generative(vector<double>& data){
     vector<double> y(4, 0);
     double total = 0;
@@ -318,3 +348,7 @@ double Model::cal_acc(Eigen::MatrixXd & cm){
     }
     return diagonal_sum / total_sum;
 }
+
+//double Model::cal_gaussian_prob(Eigen::VectorXd &x, GaussianDistribution &g){
+    
+//}
