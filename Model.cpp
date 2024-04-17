@@ -1,8 +1,5 @@
 #include "Model.h"
 
-Model::Model(){
-    read_file();
-}
 
 void Model::read_file(){
     vector<vector<double>> team(4, vector<double>(4));
@@ -113,13 +110,14 @@ void Model::Train_Generative(){
     Eigen::VectorXd X(2);
     for(int i = 0; i < 4; i++){
         u[i] << Training_mean[i].Offensive, Training_mean[i].Defensive;
-        cout << u[i] << " " << endl;
+        //cout << u[i] << " " << endl;
     }
     
     for(int i = 0; i < 4; i++){
         W[i] = covariance_matrix.inverse() * u[i];
-        cout << "W["<<i<<"]: \n"<< W[i] << endl;
-        W0[i] = (-0.5) * u[i].transpose() * covariance_matrix.inverse() * u[i] * log(Train_prob[i]);
+        //cout << "W["<<i<<"]: \n"<< W[i] << endl;
+        W0[i] = (-0.5) * u[i].transpose() * covariance_matrix.inverse() * u[i] + log(Train_prob[i]);
+        //cout << "prob: " << Train_prob[i] << endl;
     }
     vector<Eigen::VectorXd> y_pred(Training_set.size(), Eigen::VectorXd(4));
     vector<Eigen::VectorXd> ground_truth(Training_set.size(), Eigen::VectorXd(4));
@@ -160,6 +158,9 @@ void Model::Train_Generative(){
         cout << endl;
     }
     cout << "=========================================" << endl;
+    //calculate the accuracy
+    double accuracy = cal_acc(Conf_Mtx);
+    cout << "Generative Model Train Accuracy:" << accuracy << endl;
 
     //output weights
     ofstream out("generative_weights.txt");
@@ -189,7 +190,6 @@ void Model::Train_Discriminative(){
     }
     //Training parameters
     double total = 0;
-    int epochs = 100000;
     double learning_rate = 1e-6;
     for(int i = 0; i < epochs ; i++){
         for(int x = 0; x < 4; x++){
@@ -211,9 +211,9 @@ void Model::Train_Discriminative(){
                 delta_W[k] += (y(k) - t(k)) * phi[j];
             }
         }
-        cout << "epoch " << i + 1 << " : " << endl;
-        cout << "predicted:\n" << y << "\ntrue: \n" << t << endl;
-        cout << "\ndelta_W: \n" << delta_W[0] << endl;
+        //cout << "epoch " << i + 1 << " : " << endl;
+        //cout << "predicted:\n" << y << "\ntrue: \n" << t << endl;
+        //cout << "\ndelta_W: \n" << delta_W[0] << endl;
         //getchar();
         //update the weights
         for(int x = 0; x < 4; x++){
@@ -262,7 +262,7 @@ void Model::Train_Discriminative(){
 
     //calculate the accuracy
     double accuracy = cal_acc(Conf_Mtx);
-    cout << "Accuracy: " << accuracy << endl;
+    cout << "Discriminative Model Train Accuracy:" << accuracy << endl;
     //========output weights==================
     ofstream out("discriminative_weights.txt");
     for(auto& w : weights_dis){
@@ -274,9 +274,12 @@ void Model::Train_Discriminative(){
 }
 vector<double> Model::calculate_prob(vector<Data>& data){
     int N = data.size();
-    vector<double> prob(4, 0);
+    vector<double> prob(data[0].team_vector.size(), 0);
     for(auto d: data){
         prob[d.team]++;
+    }
+    for(auto& p : prob){
+        p /= data.size();
     }
 
     return prob;
@@ -284,8 +287,9 @@ vector<double> Model::calculate_prob(vector<Data>& data){
 
 vector<Mean> Model::calculate_mean(vector<Data>& data){
     int N = data.size();
-    vector<Mean> m(4);
-    int count[4] = {0};
+    int K = data[0].team_vector.size();
+    vector<Mean> m(K);
+    vector<int> count(K, 0);
     for(auto& i:m){
         i.Offensive = 0;
         i.Defensive = 0;
@@ -298,7 +302,7 @@ vector<Mean> Model::calculate_mean(vector<Data>& data){
         mean_[1] += i.Defensive;
     }
     int count_ = 0;
-    for(int i = 0; i < 4; i++){
+    for(int i = 0; i < K; i++){
         m[i].Offensive /= count[i];
         m[i].Defensive /= count[i];
         count_ += count[i];
@@ -321,12 +325,6 @@ void Model::calculate_cov_mat_(vector<Data>& data){
                 cov_mat += vec * vec.transpose();
         }
         cov_mat /= (count - 1);
-        for(int i = 0; i < cov_mat.rows() ; i ++){
-            for(int j = 0; j < cov_mat.cols() ; j++){
-                cout << cov_mat(i, j) << " ";
-            }
-            cout << endl;
-        }
         CM[k] = cov_mat;
     }
     
@@ -343,12 +341,6 @@ Eigen::MatrixXd Model::calculate_cov_mat(vector<Data>& data){
                 //cout << vec << endl;
         }
         cov_mat /= (count - 1);
-        for(int i = 0; i < cov_mat.rows() ; i ++){
-            for(int j = 0; j < cov_mat.cols() ; j++){
-                cout << cov_mat(i, j) << " ";
-            }
-            cout << endl;
-        }
         return cov_mat;
     
 }
@@ -357,7 +349,21 @@ vector<double> Model::predict_generative(vector<double>& data){
     double total = 0;
     //softmax
     for(int i = 0; i < 4; i++){
-        y[i] = exp(W[i](0) * data[0] + W[i](1) * data[1] + W0[i](0, 0));
+        y[i] = exp(W[i](0) * data[0] + W[i](1) * data[1] + W0[i]);
+        total += y[i];
+    }
+    for(auto& i : y){
+        i /= total;
+    }
+    return y;
+}
+
+vector<double> Model::predict_generative_p2(vector<double>& data){
+    vector<double> y(3, 0);
+    double total = 0;
+    //softmax
+    for(int i = 0; i < 3; i++){
+        y[i] = exp(W_[i](0) * data[0] + W_[i](1) * data[1] + W0_[i]);
         total += y[i];
     }
     for(auto& i : y){
@@ -374,6 +380,20 @@ vector<double> Model::predict_discriminative(vector<double>& data){
     //softmax
     for(int i = 0; i < 4; i++){
         y[i] = exp(weights_dis[i].transpose() * x);
+        total += y[i];
+    }
+
+    return y;
+}
+
+vector<double> Model::predict_discriminative_p2(vector<double>& data){
+    vector<double> y(3, 0);
+    Eigen::VectorXd x(3);
+    x << 1, data[0], data[1];
+    double total = 0;
+    //softmax
+    for(int i = 0; i < 3; i++){
+        y[i] = exp(weights_dis_p2[i].transpose() * x);
         total += y[i];
     }
 
@@ -405,6 +425,346 @@ double Model::cal_acc(Eigen::MatrixXd & cm){
     return diagonal_sum / total_sum;
 }
 
-//double Model::cal_gaussian_prob(Eigen::VectorXd &x, GaussianDistribution &g){
+
+void Model::Test_Discriminative(){
+    vector<Eigen::VectorXd> y_pred(Testing_set.size(), Eigen::VectorXd(4));
+    vector<Eigen::VectorXd> ground_truth(Testing_set.size(), Eigen::VectorXd(4));
+    for(int i = 0; i < Testing_set.size(); i++){
+        vector<double> d(2);
+        d[0] = Testing_set[i].Offensive;
+        d[1] = Testing_set[i].Defensive;
+        Eigen::VectorXd y_pred_vec(4);
+        Eigen::VectorXd ground_truth_vec(4);
+        vector<double> y_pred_temp = predict_discriminative(d);
+        vector<double> ground_truth_temp = Testing_set[i].team_vector;
+        for(int j = 0; j < 4; j++){
+            y_pred_vec[j] = y_pred_temp[j];
+            ground_truth_vec[j] = ground_truth_temp[j];
+        }
+        y_pred[i] = y_pred_vec;
+        ground_truth[i] = ground_truth_vec;
+    }
+    Eigen::MatrixXd Conf_Mtx(Testing_set[0].team_vector.size(), Testing_set[0].team_vector.size());
+    Conf_Mtx = cal_confusion_matrix(y_pred, ground_truth);
+    cout << "==========Confusion Matrix ============" << endl;
+    int max_width = 0;
+    for(int i = 0; i < Conf_Mtx.rows(); i++){
+        for(int j = 0; j < Conf_Mtx.cols(); j++){
+            stringstream ss;
+            ss << Conf_Mtx(i, j);
+            int element_width = ss.str().length();
+            max_width = max(max_width, element_width);
+        }
+    }
+    for(int i = 0; i < Conf_Mtx.rows(); i++){
+        for(int j = 0; j < Conf_Mtx.cols(); j++){
+            cout << setw(max_width + 1) << Conf_Mtx(i, j) << " ";
+        }
+        cout << endl;
+    }
+    cout << "=======================================" << endl;
+    //calculate the accuracy
+    double accuracy = cal_acc(Conf_Mtx);
+    cout << "Discriminative Model Test Accuracy:" << accuracy << endl;
+}
+
+void Model::Train_Discriminative_part2(){
+    //initialize weights
+    vector<Eigen::VectorXd> weights(3, Eigen::VectorXd(3));
+    vector<Eigen::VectorXd> delta_W(3, Eigen::VectorXd(3));
+    vector<double> a_k(3);
+    Eigen::VectorXd y(3); //predicted
+    Eigen::VectorXd t(3); // True Label
+    vector<Eigen::VectorXd> phi(Training_set_p2.size(), Eigen::VectorXd(3));
+    for(int i = 0; i < Training_set_p2.size(); i ++){
+        phi[i](0) = 1;
+        phi[i](1) = Training_set_p2[i].Offensive;
+        phi[i](2) = Training_set_p2[i].Defensive;
+    }
+    for(int i = 0; i < weights.size() ; i++){
+        for(int j = 0; j < 3; j++){
+            weights[i] << 1, 1, 1;
+        }
+    }
+    //Training parameters
+    double total = 0;
+    double learning_rate = 1e-6;
+    for(int i = 0; i < epochs ; i++){
+        for(int x = 0; x < 3; x++){
+            delta_W[x] << 0, 0, 0;
+        }
+        for(auto j = 0 ; j < Training_set_p2.size();j++){
+            total = 0;
+            for(int k = 0; k < 3; k++){
+                a_k[k] = exp(weights[k].transpose() * phi[j]);
+                total += a_k[k];
+            }
+            
+            t << Training_set_p2[j].team_vector[0], 
+                     Training_set_p2[j].team_vector[1], 
+                     Training_set_p2[j].team_vector[2];
+            for(int k = 0; k < 3; k++){
+                y[k] = a_k[k] / total;
+                delta_W[k] += (y(k) - t(k)) * phi[j];
+            }
+        }
+        //cout << "epoch " << i + 1 << " : " << endl;
+        //cout << "predicted:\n" << y << "\ntrue: \n" << t << endl;
+        //cout << "\ndelta_W: \n" << delta_W[0] << endl;
+        //getchar();
+        //update the weights
+        for(int x = 0; x < 3; x++){
+            weights[x] -= learning_rate * delta_W[x];
+        }
+    }  
+    //finish training
+    weights_dis_p2 = weights;
+
+    vector<Eigen::VectorXd> y_pred(Training_set_p2.size(), Eigen::VectorXd(3));
+    vector<Eigen::VectorXd> ground_truth(Training_set_p2.size(), Eigen::VectorXd(3));
+    for(int i = 0; i < Training_set_p2.size(); i++){
+        vector<double> d(2);
+        d[0] = Training_set_p2[i].Offensive;
+        d[1] = Training_set_p2[i].Defensive;
+        Eigen::VectorXd y_pred_vec(3);
+        Eigen::VectorXd ground_truth_vec(3);
+        vector<double> y_pred_temp = predict_discriminative_p2(d);
+        vector<double> ground_truth_temp = Training_set_p2[i].team_vector;
+        for(int j = 0; j < 3; j++){
+            y_pred_vec[j] = y_pred_temp[j];
+            ground_truth_vec[j] = ground_truth_temp[j];
+        }
+        y_pred[i] = y_pred_vec;
+        ground_truth[i] = ground_truth_vec;
+    }
+    Eigen::MatrixXd Conf_Mtx(Training_set_p2[0].team_vector.size(), Training_set_p2[0].team_vector.size());
+    Conf_Mtx = cal_confusion_matrix(y_pred, ground_truth);
+    cout << "==========Confusion Matrix ============" << endl;
+    int max_width = 0;
+    for(int i = 0; i < Conf_Mtx.rows(); i++){
+        for(int j = 0; j < Conf_Mtx.cols(); j++){
+            stringstream ss;
+            ss << Conf_Mtx(i, j);
+            int element_width = ss.str().length();
+            max_width = max(max_width, element_width);
+        }
+    }
+    for(int i = 0; i < Conf_Mtx.rows(); i++){
+        for(int j = 0; j < Conf_Mtx.cols(); j++){
+            cout << setw(max_width + 1) << Conf_Mtx(i, j) << " ";
+        }
+        cout << endl;
+    }
+    cout << "=======================================" << endl;
+
+    //calculate the accuracy
+    double accuracy = cal_acc(Conf_Mtx);
+    cout << "Discriminative Model Train Accuracy (part 2):" << accuracy << endl;
+    //========output weights==================
+    ofstream out("discriminative_weights_part2.txt");
+    for(auto& w : weights_dis_p2){
+        for(int i = 0; i < w.size() ; i++){
+            out << w(i) << " ";
+        }
+        out << endl;
+    }
+}
+
+void Model::Train_Generative_part2(){
+    Training_mean = calculate_mean(Training_set_p2);
+    covariance_matrix = calculate_cov_mat(Training_set_p2);
+    Train_prob = calculate_prob(Training_set_p2);
+    vector<Eigen::VectorXd> u(3, Eigen::VectorXd(2));
+    Eigen::VectorXd X(2);
+    for(int i = 0; i < 3; i++){
+        u[i] << Training_mean[i].Offensive, Training_mean[i].Defensive;
+        //cout << u[i] << " " << endl;
+    }
     
-//}
+    for(int i = 0; i < 3; i++){
+        W_[i] = covariance_matrix.inverse() * u[i];
+        //cout << "W["<<i<<"]: \n"<< W[i] << endl;
+        W0_[i] = (-0.5) * u[i].transpose() * covariance_matrix.inverse() * u[i] + log(Train_prob[i]);
+        //cout << "prob: " << Train_prob[i] << endl;
+    }
+    vector<Eigen::VectorXd> y_pred(Training_set_p2.size(), Eigen::VectorXd(3));
+    vector<Eigen::VectorXd> ground_truth(Training_set_p2.size(), Eigen::VectorXd(3));
+
+    for(int i = 0; i < Training_set_p2.size(); i++){
+        vector<double> d(2);
+        d[0] = Training_set[i].Offensive;
+        d[1] = Training_set[i].Defensive;
+        Eigen::VectorXd y_pred_vec(3);
+        Eigen::VectorXd ground_truth_vec(3);
+        vector<double> y_pred_temp = predict_generative_p2(d);
+        vector<double> ground_truth_temp = Training_set_p2[i].team_vector;
+        for(int j = 0; j < 3; j++){
+            y_pred_vec[j] = y_pred_temp[j];
+            ground_truth_vec[j] = ground_truth_temp[j];
+        }
+        y_pred[i] = y_pred_vec;
+        ground_truth[i] = ground_truth_vec;
+
+    }
+
+    Eigen::MatrixXd Conf_Mtx(Training_set_p2[0].team_vector.size(), Training_set_p2[0].team_vector.size());
+    Conf_Mtx = cal_confusion_matrix(y_pred, ground_truth);
+    cout << "========== Confusion Matrix ============" << endl;
+    int max_width = 0;
+    for(int i = 0; i < Conf_Mtx.rows(); i++){
+        for(int j = 0; j < Conf_Mtx.cols(); j++){
+            stringstream ss;
+            ss << Conf_Mtx(i, j);
+            int element_width = ss.str().length();
+            max_width = max(max_width, element_width);
+        }
+    }
+    for(int i = 0; i < Conf_Mtx.rows(); i++){
+        for(int j = 0; j < Conf_Mtx.cols(); j++){
+            cout << setw(max_width + 1) << Conf_Mtx(i, j) << " ";
+        }
+        cout << endl;
+    }
+    cout << "=========================================" << endl;
+    //calculate the accuracy
+    double accuracy = cal_acc(Conf_Mtx);
+    cout << "Generative Model Train Accuracy (part 2):" << accuracy << endl;
+    //output weights
+    ofstream out("generative_weights_part2.txt");
+    for(int i = 0; i < 3; i++){
+        out << W_[i](0) << " " <<W_[i](1) << " " << W0_[i] << endl;
+    }
+
+}
+
+void Model::Test_Discriminative_part2(){
+    vector<Eigen::VectorXd> y_pred(Testing_set_p2.size(), Eigen::VectorXd(3));
+    vector<Eigen::VectorXd> ground_truth(Testing_set_p2.size(), Eigen::VectorXd(3));
+    for(int i = 0; i < Testing_set.size(); i++){
+        vector<double> d(2);
+        d[0] = Testing_set[i].Offensive;
+        d[1] = Testing_set[i].Defensive;
+        Eigen::VectorXd y_pred_vec(3);
+        Eigen::VectorXd ground_truth_vec(3);
+        vector<double> y_pred_temp = predict_discriminative_p2(d);
+        vector<double> ground_truth_temp = Testing_set[i].team_vector;
+        for(int j = 0; j < 3; j++){
+            y_pred_vec[j] = y_pred_temp[j];
+            ground_truth_vec[j] = ground_truth_temp[j];
+        }
+        y_pred[i] = y_pred_vec;
+        ground_truth[i] = ground_truth_vec;
+    }
+    Eigen::MatrixXd Conf_Mtx(Testing_set_p2[0].team_vector.size(), Testing_set_p2[0].team_vector.size());
+    Conf_Mtx = cal_confusion_matrix(y_pred, ground_truth);
+    cout << "==========Confusion Matrix ============" << endl;
+    int max_width = 0;
+    for(int i = 0; i < Conf_Mtx.rows(); i++){
+        for(int j = 0; j < Conf_Mtx.cols(); j++){
+            stringstream ss;
+            ss << Conf_Mtx(i, j);
+            int element_width = ss.str().length();
+            max_width = max(max_width, element_width);
+        }
+    }
+    for(int i = 0; i < Conf_Mtx.rows(); i++){
+        for(int j = 0; j < Conf_Mtx.cols(); j++){
+            cout << setw(max_width + 1) << Conf_Mtx(i, j) << " ";
+        }
+        cout << endl;
+    }
+    cout << "=======================================" << endl;
+    //calculate the accuracy
+    double accuracy = cal_acc(Conf_Mtx);
+    cout << "Discriminative Model Test Accuracy (part 2): " << accuracy << endl;
+}
+
+void Model::Test_Generative(){
+    vector<Eigen::VectorXd> y_pred(Testing_set.size(), Eigen::VectorXd(4));
+    vector<Eigen::VectorXd> ground_truth(Testing_set.size(), Eigen::VectorXd(4));
+
+    for(int i = 0; i < Testing_set.size(); i++){
+        vector<double> d(2);
+        d[0] = Testing_set[i].Offensive;
+        d[1] = Testing_set[i].Defensive;
+        Eigen::VectorXd y_pred_vec(4);
+        Eigen::VectorXd ground_truth_vec(4);
+        vector<double> y_pred_temp = predict_generative(d);
+        vector<double> ground_truth_temp = Testing_set[i].team_vector;
+        for(int j = 0; j < 4; j++){
+            y_pred_vec[j] = y_pred_temp[j];
+            ground_truth_vec[j] = ground_truth_temp[j];
+        }
+        y_pred[i] = y_pred_vec;
+        ground_truth[i] = ground_truth_vec;
+
+    }
+
+    Eigen::MatrixXd Conf_Mtx(Testing_set[0].team_vector.size(), Testing_set[0].team_vector.size());
+    Conf_Mtx = cal_confusion_matrix(y_pred, ground_truth);
+    cout << "========== Confusion Matrix ============" << endl;
+    int max_width = 0;
+    for(int i = 0; i < Conf_Mtx.rows(); i++){
+        for(int j = 0; j < Conf_Mtx.cols(); j++){
+            stringstream ss;
+            ss << Conf_Mtx(i, j);
+            int element_width = ss.str().length();
+            max_width = max(max_width, element_width);
+        }
+    }
+    for(int i = 0; i < Conf_Mtx.rows(); i++){
+        for(int j = 0; j < Conf_Mtx.cols(); j++){
+            cout << setw(max_width + 1) << Conf_Mtx(i, j) << " ";
+        }
+        cout << endl;
+    }
+    cout << "=========================================" << endl;
+    //calculate the accuracy
+    double accuracy = cal_acc(Conf_Mtx);
+    cout << "Generative Model Test Accuracy:" << accuracy << endl;
+}
+
+void Model::Test_Generative_part2(){
+    vector<Eigen::VectorXd> y_pred(Testing_set_p2.size(), Eigen::VectorXd(3));
+    vector<Eigen::VectorXd> ground_truth(Testing_set_p2.size(), Eigen::VectorXd(3));
+
+    for(int i = 0; i < Testing_set.size(); i++){
+        vector<double> d(2);
+        d[0] = Testing_set_p2[i].Offensive;
+        d[1] = Testing_set_p2[i].Defensive;
+        Eigen::VectorXd y_pred_vec(3);
+        Eigen::VectorXd ground_truth_vec(3);
+        vector<double> y_pred_temp = predict_generative_p2(d);
+        vector<double> ground_truth_temp = Testing_set_p2[i].team_vector;
+        for(int j = 0; j < 3; j++){
+            y_pred_vec[j] = y_pred_temp[j];
+            ground_truth_vec[j] = ground_truth_temp[j];
+        }
+        y_pred[i] = y_pred_vec;
+        ground_truth[i] = ground_truth_vec;
+
+    }
+
+    Eigen::MatrixXd Conf_Mtx(Testing_set_p2[0].team_vector.size(), Testing_set_p2[0].team_vector.size());
+    Conf_Mtx = cal_confusion_matrix(y_pred, ground_truth);
+    cout << "========== Confusion Matrix ============" << endl;
+    int max_width = 0;
+    for(int i = 0; i < Conf_Mtx.rows(); i++){
+        for(int j = 0; j < Conf_Mtx.cols(); j++){
+            stringstream ss;
+            ss << Conf_Mtx(i, j);
+            int element_width = ss.str().length();
+            max_width = max(max_width, element_width);
+        }
+    }
+    for(int i = 0; i < Conf_Mtx.rows(); i++){
+        for(int j = 0; j < Conf_Mtx.cols(); j++){
+            cout << setw(max_width + 1) << Conf_Mtx(i, j) << " ";
+        }
+        cout << endl;
+    }
+    cout << "=========================================" << endl;
+    //calculate the accuracy
+    double accuracy = cal_acc(Conf_Mtx);
+    cout << "Generative Model Test Accuracy (part 2):" << accuracy << endl;
+}
